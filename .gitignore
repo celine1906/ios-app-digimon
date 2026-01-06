@@ -60,3 +60,13 @@ fastlane/report.xml
 fastlane/Preview.html
 fastlane/screenshots/**/*.png
 fastlane/test_output
+# Xcode user-specific files
+xcuserdata/
+*.xcuserstate
+
+# Build artifacts
+DerivedData/
+
+# macOS
+.DS_Store
+
