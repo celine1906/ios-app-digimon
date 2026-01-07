@@ -30,7 +30,7 @@ class MainTabBarController: UITabBarController {
 
         favoriteNav.tabBarItem = UITabBarItem(
             title: "Favorite",
-            image: UIImage(systemName: "heart")
+            image: UIImage(systemName: "heart"),
             selectedImage: UIImage(systemName: "heart.fill")
         )
 

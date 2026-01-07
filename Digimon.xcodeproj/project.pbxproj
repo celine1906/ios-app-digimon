@@ -48,16 +48,6 @@
 			path = Digimon;
 			sourceTree = "<group>";
 		};
-		12A095CB2F0CE008003F0E8B /* DigimonTests */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = DigimonTests;
-			sourceTree = "<group>";
-		};
-		12A095D52F0CE008003F0E8B /* DigimonUITests */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = DigimonUITests;
-			sourceTree = "<group>";
-		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -89,8 +79,6 @@
 			isa = PBXGroup;
 			children = (
 				12A095B12F0CE007003F0E8B /* Digimon */,
-				12A095CB2F0CE008003F0E8B /* DigimonTests */,
-				12A095D52F0CE008003F0E8B /* DigimonUITests */,
 				12A095B02F0CE007003F0E8B /* Products */,
 			);
 			sourceTree = "<group>";
@@ -143,9 +131,6 @@
 			dependencies = (
 				12A095CA2F0CE008003F0E8B /* PBXTargetDependency */,
 			);
-			fileSystemSynchronizedGroups = (
-				12A095CB2F0CE008003F0E8B /* DigimonTests */,
-			);
 			name = DigimonTests;
 			packageProductDependencies = (
 			);
@@ -165,9 +150,6 @@
 			);
 			dependencies = (
 				12A095D42F0CE008003F0E8B /* PBXTargetDependency */,
-			);
-			fileSystemSynchronizedGroups = (
-				12A095D52F0CE008003F0E8B /* DigimonUITests */,
 			);
 			name = DigimonUITests;
 			packageProductDependencies = (
