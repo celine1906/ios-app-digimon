@@ -35,7 +35,7 @@ final class DigimonCardView: UIView {
         fieldNameStack.translatesAutoresizingMaskIntoConstraints = false
         fieldIconStack.translatesAutoresizingMaskIntoConstraints = false
 
-        thumbnail.contentMode = .scaleAspectFit
+        thumbnail.contentMode = .scaleAspectFill
         thumbnail.clipsToBounds = true
         thumbnail.layer.cornerRadius = 8
         thumbnail.backgroundColor = .systemGray6
@@ -89,11 +89,7 @@ final class DigimonCardView: UIView {
         
         nameLabel.text = viewModel.name
         
-        if let imageUrl = viewModel.imageUrl {
-            loadImage(from: imageUrl, into: thumbnail)
-        } else {
-            thumbnail.image = UIImage(systemName: "photo")
-        }
+        thumbnail.setImage(from: viewModel.imageUrl)
         
         if let meta = viewModel.metaInfo, !meta.isEmpty {
             metaLabel.text = meta
@@ -111,11 +107,12 @@ final class DigimonCardView: UIView {
                 label.text = field.name
                 label.font = .systemFont(ofSize: 12)
                 label.textColor = .secondaryLabel
+                label.textColor = .secondaryLabel
                 fieldNameStack.addArrangedSubview(label)
                 
                 if let iconUrl = field.iconUrl {
                     let imageView = UIImageView()
-                    loadImage(from: iconUrl, into: imageView)
+                    imageView.setImage(from: iconUrl)
                     imageView.contentMode = .scaleAspectFit
                     imageView.widthAnchor.constraint(equalToConstant: 24).isActive = true
                     imageView.heightAnchor.constraint(equalToConstant: 24).isActive = true
@@ -128,30 +125,6 @@ final class DigimonCardView: UIView {
             fieldNameStack.isHidden = true
             fieldIconStack.isHidden = true
         }
-    }
-    
-    private func loadImage(from urlString: String, into imageView: UIImageView) {
-        guard let url = URL(string: urlString) else {
-            imageView.image = UIImage(systemName: "photo")
-            return
-        }
-        
-        imageView.image = UIImage(systemName: "photo")
-        
-        let task = URLSession.shared.dataTask(with: url) { [weak imageView] data, _, error in
-            guard let imageView = imageView,
-                  let data = data,
-                  error == nil,
-                  let image = UIImage(data: data) else { return }
-            DispatchQueue.main.async {
-                imageView.image = image
-            }
-        }
-        
-        if imageView == thumbnail {
-            currentImageTask = task
-        }
-        task.resume()
     }
 }
 

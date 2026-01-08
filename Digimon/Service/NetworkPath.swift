@@ -15,7 +15,7 @@ enum NetworkPath {
         switch self {
         case .getDigimons(let pageSize, let page):
             return URL(string:
-                "https://digi-api.com/api/v1/digimon?pageSize=\(pageSize)&page=\(page)"
+                        "https://digi-api.com/api/v1/digimon?pageSize=\(pageSize)&page=\(page)"
             )
         case .getDigimonDetail(let urlString):
             return URL(string: urlString)

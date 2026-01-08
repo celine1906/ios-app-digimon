@@ -8,25 +8,51 @@
 import UIKit
 
 extension UIImageView {
-    func setImage(from urlString: String?, into imageView: UIImageView, task: inout URLSessionDataTask?) {
-        task?.cancel()
-        
-        guard let urlString = urlString, let url = URL(string: urlString) else {
-            imageView.image = UIImage(systemName: "photo")
-            return
-        }
-        imageView.image = UIImage(systemName: "photo")
+    private static var taskKey = 0
     
-        let newTask = URLSession.shared.dataTask(with: url) { [weak imageView] data, _, error in
-            guard let imageView = imageView,
-                  let data = data,
-                  error == nil,
-                  let image = UIImage(data: data) else { return }
+    private var currentTask: URLSessionDataTask? {
+        get {
+            return objc_getAssociatedObject(self, &UIImageView.taskKey) as? URLSessionDataTask
+        }
+        set {
+            objc_setAssociatedObject(self, &UIImageView.taskKey, newValue, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+        }
+    }
+
+    func setImage(
+        from urlString: String?,
+        placeholder: UIImage? = UIImage(systemName: "photo")
+    ) {
+        currentTask?.cancel()
+        currentTask = nil
+
+        self.image = placeholder
+
+        guard
+            let urlString,
+            let url = URL(string: urlString)
+        else { return }
+
+        let newTask = URLSession.shared.dataTask(with: url) { [weak self] data, _, error in
+            guard
+                let self,
+                let data,
+                error == nil,
+                let image = UIImage(data: data)
+            else { return }
+
             DispatchQueue.main.async {
-                imageView.image = image
+                self.image = image
+                self.currentTask = nil
             }
         }
-        task = newTask
+
+        currentTask = newTask
         newTask.resume()
+    }
+    
+    func cancelImageLoad() {
+        currentTask?.cancel()
+        currentTask = nil
     }
 }
