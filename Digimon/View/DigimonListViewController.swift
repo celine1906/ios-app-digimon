@@ -20,12 +20,27 @@ class DigimonListViewController: UIViewController {
         label.translatesAutoresizingMaskIntoConstraints = false
         return label
     }()
+    
+    private let searchContainer: UIView = {
+        let view = UIView()
+        view.translatesAutoresizingMaskIntoConstraints = false
+        return view
+    }()
 
     private let searchBar: UISearchBar = {
         let sb = UISearchBar()
         sb.placeholder = "Search Digimon"
         sb.translatesAutoresizingMaskIntoConstraints = false
+        sb.searchBarStyle = .minimal
         return sb
+    }()
+    
+    private lazy var filterButton: UIButton = {
+        let btn = UIButton(type: .system)
+        btn.setImage(UIImage(systemName: "line.3.horizontal.decrease.circle"), for: .normal)
+        btn.translatesAutoresizingMaskIntoConstraints = false
+        btn.addTarget(self, action: #selector(filterTapped), for: .touchUpInside)
+        return btn
     }()
     
     private let tableView: UITableView = {
@@ -34,6 +49,7 @@ class DigimonListViewController: UIViewController {
         tv.separatorStyle = .none
         tv.rowHeight = UITableView.automaticDimension
         tv.estimatedRowHeight = 120
+        tv.backgroundColor = .clear
         return tv
     }()
 
@@ -50,13 +66,34 @@ class DigimonListViewController: UIViewController {
         return view
     }()
     
+    private let emptyStateContainer: UIView = {
+        let view = UIView()
+        view.translatesAutoresizingMaskIntoConstraints = false
+        return view
+    }()
+    
+    private let emptyStateStack: UIStackView = {
+        let stack = UIStackView()
+        stack.axis = .vertical
+        stack.alignment = .center
+        stack.spacing = 12
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        return stack
+    }()
+    
+    private let loadingIndicator: UIActivityIndicatorView = {
+        let indicator = UIActivityIndicatorView(style: .large)
+        indicator.hidesWhenStopped = true
+        return indicator
+    }()
+    
     private let emptyStateLabel: UILabel = {
         let label = UILabel()
         label.text = "Loading Digimon..."
         label.textAlignment = .center
         label.textColor = .secondaryLabel
         label.font = .systemFont(ofSize: 16)
-        label.translatesAutoresizingMaskIntoConstraints = false
+        label.numberOfLines = 0
         return label
     }()
     
@@ -67,16 +104,29 @@ class DigimonListViewController: UIViewController {
         tableView.register(DigimonCell.self, forCellReuseIdentifier: "DigimonCell")
         tableView.dataSource = self
         tableView.delegate = self
-        tableView.backgroundView = emptyStateLabel
         
         searchBar.delegate = self
-
+        
+        setupEmptyState()
         bindViewModel()
         Task { [weak self] in
             await self?.viewModel.fetchInitial()
         }
 
         setupUI()
+    }
+    
+    private func setupEmptyState() {
+        emptyStateStack.addArrangedSubview(loadingIndicator)
+        emptyStateStack.addArrangedSubview(emptyStateLabel)
+        emptyStateContainer.addSubview(emptyStateStack)
+        
+        NSLayoutConstraint.activate([
+            emptyStateStack.centerXAnchor.constraint(equalTo: emptyStateContainer.centerXAnchor),
+            emptyStateStack.centerYAnchor.constraint(equalTo: emptyStateContainer.centerYAnchor)
+        ])
+        
+        tableView.backgroundView = emptyStateContainer
     }
     
     private func bindViewModel() {
@@ -88,45 +138,86 @@ class DigimonListViewController: UIViewController {
                 switch state {
                 case .loading:
                     if self.displayedDigimons.isEmpty {
-                        // Initial loading
-                        self.tableView.tableFooterView = self.loadingFooter
+                        self.tableView.tableFooterView = nil
+                        self.loadingIndicator.startAnimating()
+                        self.emptyStateLabel.text = "Loading Digimon..."
+                        self.emptyStateContainer.isHidden = false
                     } else {
-                        // Pagination loading
                         self.tableView.tableFooterView = self.loadingFooter
+                        self.emptyStateContainer.isHidden = true
                     }
 
                 case .loaded(let digimons):
                     self.tableView.tableFooterView = nil
+                    self.loadingIndicator.stopAnimating()
                     self.displayedDigimons = digimons
+                    
+                    if digimons.isEmpty && !self.viewModel.searchText.isEmpty {
+                        self.emptyStateLabel.text = "No Digimon found"
+                        self.emptyStateContainer.isHidden = false
+                    } else if digimons.isEmpty {
+                        self.emptyStateLabel.text = "Loading Digimon..."
+                        self.emptyStateContainer.isHidden = false
+                    } else {
+                        self.emptyStateContainer.isHidden = true
+                    }
+                    
                     self.tableView.reloadData()
 
                 case .error(let error):
                     self.tableView.tableFooterView = nil
+                    self.loadingIndicator.stopAnimating()
                     print("Error:", error.localizedDescription)
                     self.showError(error)
                 }
+            }
+            .store(in: &cancellables)
+        
+        viewModel.$activeFilters
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] filters in
+                let hasFilters = !filters.levels.isEmpty || !filters.types.isEmpty || !filters.attributes.isEmpty || !filters.fields.isEmpty
+                self?.filterButton.tintColor = hasFilters ? .systemRed : .systemBlue
             }
             .store(in: &cancellables)
     }
 
     private func setupUI() {
         view.addSubview(titleLabel)
-        view.addSubview(searchBar)
+        view.addSubview(searchContainer)
+        searchContainer.addSubview(searchBar)
+        searchContainer.addSubview(filterButton)
         view.addSubview(tableView)
         
         NSLayoutConstraint.activate([
             titleLabel.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
             titleLabel.centerXAnchor.constraint(equalTo: view.centerXAnchor),
 
-            searchBar.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 12),
-            searchBar.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            searchBar.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            searchContainer.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 8),
+            searchContainer.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            searchContainer.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             
-            tableView.topAnchor.constraint(equalTo: searchBar.bottomAnchor),
+            searchBar.topAnchor.constraint(equalTo: searchContainer.topAnchor),
+            searchBar.leadingAnchor.constraint(equalTo: searchContainer.leadingAnchor),
+            searchBar.trailingAnchor.constraint(equalTo: filterButton.leadingAnchor, constant: -8),
+            searchBar.bottomAnchor.constraint(equalTo: searchContainer.bottomAnchor),
+            
+            filterButton.centerYAnchor.constraint(equalTo: searchBar.centerYAnchor),
+            filterButton.trailingAnchor.constraint(equalTo: searchContainer.trailingAnchor, constant: -16),
+            filterButton.widthAnchor.constraint(equalToConstant: 44),
+            filterButton.heightAnchor.constraint(equalToConstant: 44),
+            
+            tableView.topAnchor.constraint(equalTo: searchContainer.bottomAnchor),
             tableView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             tableView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             tableView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
         ])
+    }
+    
+    @objc private func filterTapped() {
+        let filterVC = FilterViewController(viewModel: viewModel)
+        let nav = UINavigationController(rootViewController: filterVC)
+        present(nav, animated: true)
     }
     
     private func showError(_ error: NetworkError) {
@@ -161,15 +252,28 @@ extension DigimonListViewController: UITableViewDataSource, UITableViewDelegate 
     }
     
     func tableView(_ tableView: UITableView, willDisplay cell: UITableViewCell, forRowAt indexPath: IndexPath) {
-        // Trigger load saat sudah dekat dengan bottom (2 items dari bawah)
         let threshold = displayedDigimons.count - 2
         
-        if indexPath.row >= threshold {
+        if indexPath.row >= threshold && viewModel.searchText.isEmpty && !viewModel.hasActiveFilters {
             Task { [weak self] in
                 await self?.viewModel.loadNextPage()
             }
         }
     }
+    
+    func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
+        tableView.deselectRow(at: indexPath, animated: true)
+
+        let digimon = displayedDigimons[indexPath.row]
+
+        let detailVC = DigimonDetailViewController(
+            href: digimon.href,
+            cachedDetail: digimon.cachedDetail
+        )
+
+        navigationController?.pushViewController(detailVC, animated: true)
+    }
+
 }
 
 extension DigimonListViewController: UISearchBarDelegate {

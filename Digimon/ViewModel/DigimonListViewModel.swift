@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import SwiftUI
 import Combine
 
 enum DigimonListViewState {
@@ -15,14 +14,28 @@ enum DigimonListViewState {
     case error(NetworkError)
 }
 
+struct FilterOptions {
+    var levels: Set<String> = []
+    var types: Set<String> = []
+    var attributes: Set<String> = []
+    var fields: Set<String> = []
+}
+
+@MainActor
 class DigimonListViewModel: ObservableObject {
     
     @Published var searchText: String = "" {
         didSet {
-            applySearch()
+            applyFiltersAndSearch()
         }
     }
     @Published private(set) var state: DigimonListViewState = .loading
+    @Published var activeFilters = FilterOptions()
+    
+    var hasActiveFilters: Bool {
+        !activeFilters.levels.isEmpty || !activeFilters.types.isEmpty ||
+        !activeFilters.attributes.isEmpty || !activeFilters.fields.isEmpty
+    }
     
     private var allDigimons: [DigimonModel] = []
     private var pendingDigimons: [DigimonModel] = []
@@ -57,39 +70,37 @@ class DigimonListViewModel: ObservableObject {
         }
         
         if allDigimons.isEmpty {
-            updateState(.loading)
+            state = .loading
         }
         
         isLoading = true
 
-        Task {
-            do {
-                let response: DigimonListResponse = try await network.request(
-                    .getDigimons(pageSize: pageSize, page: currentPage)
-                )
+        do {
+            let response: DigimonListResponse = try await network.request(
+                .getDigimons(pageSize: pageSize, page: currentPage)
+            )
 
-                if let pageable = response.pageable {
-                    totalPages = pageable.totalPages
-                }
-                
-                if response.content.count < pageSize || currentPage >= totalPages - 1 {
-                    hasMoreData = false
-                }
-                
-                currentPage += 1
-                
-                pendingDigimons.append(contentsOf: response.content)
-                
-                await loadNextBatchDetails()
-                
-            } catch let error as NetworkError {
-                updateState(.error(error))
-            } catch {
-                updateState(.error(.unknown))
+            if let pageable = response.pageable {
+                totalPages = pageable.totalPages
             }
-
-            isLoading = false
+            
+            if response.content.count < pageSize || currentPage >= totalPages - 1 {
+                hasMoreData = false
+            }
+            
+            currentPage += 1
+            
+            pendingDigimons.append(contentsOf: response.content)
+            
+            await loadNextBatchDetails()
+            
+        } catch let error as NetworkError {
+            state = .error(error)
+        } catch {
+            state = .error(.unknown)
         }
+
+        isLoading = false
     }
     
     private func loadNextBatchDetails() async {
@@ -97,19 +108,16 @@ class DigimonListViewModel: ObservableObject {
         
         isLoadingDetails = true
         
-        // Ambil 8 items pertama dari pending
         let batchSize = min(8, pendingDigimons.count)
         let batch = Array(pendingDigimons.prefix(batchSize))
         pendingDigimons.removeFirst(batchSize)
         
-        // Load details untuk batch ini secara parallel
+        var loadedDetails: [(DigimonModel, DigimonDetail?)] = []
+        
         await withTaskGroup(of: (Int, DigimonDetail?).self) { group in
             for item in batch {
                 if let cached = detailCache[item.id] {
-                    // Sudah di-cache, langsung pakai
-                    var itemWithDetail = item
-                    itemWithDetail.cachedDetail = cached
-                    allDigimons.append(itemWithDetail)
+                    loadedDetails.append((item, cached))
                     continue
                 }
                 
@@ -126,22 +134,48 @@ class DigimonListViewModel: ObservableObject {
                 }
             }
             
-            // Collect results
+            var detailsMap: [Int: DigimonDetail] = [:]
             for await (id, detail) in group {
-                guard let detail = detail else { continue }
-                detailCache[id] = detail
-                
-                if let item = batch.first(where: { $0.id == id }) {
-                    var itemWithDetail = item
-                    itemWithDetail.cachedDetail = detail
-                    allDigimons.append(itemWithDetail)
+                if let detail = detail {
+                    detailsMap[id] = detail
+                    detailCache[id] = detail
                 }
+            }
+            
+            for item in batch {
+                if let detail = detailsMap[item.id] {
+                    loadedDetails.append((item, detail))
+                } else if let cached = detailCache[item.id] {
+                    loadedDetails.append((item, cached))
+                }
+            }
+        }
+        
+        for (item, detail) in loadedDetails {
+            if let detail = detail {
+                var itemWithDetail = item
+                itemWithDetail.cachedDetail = detail
+                allDigimons.append(itemWithDetail)
             }
         }
         
         isLoadingDetails = false
         
-        applySearch()
+        applyFiltersAndSearch()
+    }
+    
+    func getAllDigimons() -> [DigimonModel] {
+        return allDigimons
+    }
+    
+    func applyFilters(levels: Set<String>, types: Set<String>, attributes: Set<String>, fields: Set<String>) {
+        activeFilters = FilterOptions(
+            levels: levels,
+            types: types,
+            attributes: attributes,
+            fields: fields
+        )
+        applyFiltersAndSearch()
     }
     
     func refresh() async {
@@ -151,27 +185,46 @@ class DigimonListViewModel: ObservableObject {
         currentPage = 0
         hasMoreData = true
         totalPages = 0
+        activeFilters = FilterOptions()
         await loadNextPage()
     }
-}
-
-private extension DigimonListViewModel {
-    func updateState(_ state: DigimonListViewState) {
-        DispatchQueue.main.async {
-            self.state = state
-        }
-    }
     
-    func applySearch() {
-        let result: [DigimonModel]
-
-        if searchText.isEmpty {
-            result = allDigimons.filter { $0.cachedDetail != nil }
-        } else {
-            let query = searchText.lowercased()
-            result = allDigimons.filter { digimon in
-                guard digimon.cachedDetail != nil else { return false }
+    private func applyFiltersAndSearch() {
+        var result = allDigimons.filter { $0.cachedDetail != nil }
+        
+        if hasActiveFilters {
+            result = result.filter { digimon in
+                guard let detail = digimon.cachedDetail else { return false }
                 
+                var matches = true
+                
+                if !activeFilters.levels.isEmpty {
+                    let digimonLevels = detail.levels?.map { $0.level } ?? []
+                    matches = matches && !Set(digimonLevels).isDisjoint(with: activeFilters.levels)
+                }
+                
+                if !activeFilters.types.isEmpty {
+                    let digimonTypes = detail.types?.map { $0.type } ?? []
+                    matches = matches && !Set(digimonTypes).isDisjoint(with: activeFilters.types)
+                }
+                
+                if !activeFilters.attributes.isEmpty {
+                    let digimonAttributes = detail.attributes?.map { $0.attribute } ?? []
+                    matches = matches && !Set(digimonAttributes).isDisjoint(with: activeFilters.attributes)
+                }
+                
+                if !activeFilters.fields.isEmpty {
+                    let digimonFields = detail.fields?.map { $0.field } ?? []
+                    matches = matches && !Set(digimonFields).isDisjoint(with: activeFilters.fields)
+                }
+                
+                return matches
+            }
+        }
+        
+        if !searchText.isEmpty {
+            let query = searchText.lowercased()
+            result = result.filter { digimon in
                 let nameMatch = digimon.name.lowercased().contains(query)
                 let levelMatch = digimon.displayLevel.lowercased().contains(query)
                 let typeMatch = digimon.displayType.lowercased().contains(query)
@@ -181,6 +234,6 @@ private extension DigimonListViewModel {
             }
         }
 
-        updateState(.loaded(result))
+        state = .loaded(result)
     }
 }
