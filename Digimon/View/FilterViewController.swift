@@ -169,7 +169,6 @@ class FilterViewController: UIViewController {
         countLabel.textColor = selectedCount > 0 ? color : .secondaryLabel
         countLabel.translatesAutoresizingMaskIntoConstraints = false
         
-        // Create grid layout for chips
         let chipsContainer = UIView()
         chipsContainer.translatesAutoresizingMaskIntoConstraints = false
         

@@ -17,7 +17,8 @@ enum DetailViewState {
 final class DigimonDetailViewModel: ObservableObject {
     @Published private(set) var state: DetailViewState = .loading
     private let network = NetworkService()
-    private let href: String
+    var currentDetail: DigimonDetail?
+    let href: String
     private let cachedDetail: DigimonDetail?
 
     init(href: String, cachedDetail: DigimonDetail?) {
@@ -35,6 +36,7 @@ final class DigimonDetailViewModel: ObservableObject {
             let detail: DigimonDetail = try await network.request(
                 .getDigimonDetail(urlString: href)
             )
+            self.currentDetail = detail
             state = .loaded(detail)
         } catch let error as NetworkError {
             state = .error(error)

@@ -12,8 +12,11 @@ final class DigimonDetailViewController: UIViewController {
 
     private let viewModel: DigimonDetailViewModel
     private var cancellables = Set<AnyCancellable>()
+    private var currentDigimonId: Int?
+    private var currentDigimonHref: String
 
     init(href: String, cachedDetail: DigimonDetail?) {
+        self.currentDigimonHref = href
         self.viewModel = DigimonDetailViewModel(
             href: href,
             cachedDetail: cachedDetail
@@ -26,7 +29,21 @@ final class DigimonDetailViewController: UIViewController {
     private let scrollView = UIScrollView()
     private let contentStack = UIStackView()
 
+    private let imageContainerView = UIView()
     private let imageView = UIImageView()
+    private lazy var favoriteButton: UIButton = {
+        let btn = UIButton(type: .system)
+        btn.translatesAutoresizingMaskIntoConstraints = false
+        btn.addTarget(self, action: #selector(favoriteTapped), for: .touchUpInside)
+        btn.backgroundColor = .systemBackground
+        btn.layer.cornerRadius = 22
+        btn.layer.shadowColor = UIColor.black.cgColor
+        btn.layer.shadowOffset = CGSize(width: 0, height: 2)
+        btn.layer.shadowRadius = 4
+        btn.layer.shadowOpacity = 0.1
+        return btn
+    }()
+    
     private let nameLabel = UILabel()
     
     private let basicInfoCard = UIView()
@@ -54,6 +71,7 @@ final class DigimonDetailViewController: UIViewController {
 
         setupUI()
         bindViewModel()
+        observeFavoriteChanges()
 
         Task { await viewModel.load() }
     }
@@ -82,24 +100,38 @@ final class DigimonDetailViewController: UIViewController {
             contentStack.widthAnchor.constraint(equalTo: scrollView.widthAnchor, constant: -32)
         ])
 
+        imageContainerView.translatesAutoresizingMaskIntoConstraints = false
+        imageContainerView.heightAnchor.constraint(equalToConstant: 200).isActive = true
+        
         imageView.contentMode = .scaleAspectFit
-        imageView.heightAnchor.constraint(equalToConstant: 200).isActive = true
+        imageView.translatesAutoresizingMaskIntoConstraints = false
+        
+        imageContainerView.addSubview(imageView)
+        imageContainerView.addSubview(favoriteButton)
+        
+        NSLayoutConstraint.activate([
+            imageView.topAnchor.constraint(equalTo: imageContainerView.topAnchor),
+            imageView.leadingAnchor.constraint(equalTo: imageContainerView.leadingAnchor),
+            imageView.trailingAnchor.constraint(equalTo: imageContainerView.trailingAnchor),
+            imageView.bottomAnchor.constraint(equalTo: imageContainerView.bottomAnchor),
+            
+            favoriteButton.topAnchor.constraint(equalTo: imageContainerView.topAnchor, constant: 8),
+            favoriteButton.trailingAnchor.constraint(equalTo: imageContainerView.trailingAnchor, constant: -8),
+            favoriteButton.widthAnchor.constraint(equalToConstant: 44),
+            favoriteButton.heightAnchor.constraint(equalToConstant: 44)
+        ])
 
         nameLabel.font = .systemFont(ofSize: 28, weight: .bold)
         nameLabel.textAlignment = .center
         nameLabel.numberOfLines = 0
 
         setupBasicInfoCard()
-        
         setupFieldsCard()
-        
         setupDescriptionCard()
-
         setupSkillsCard()
-
         setupPriorEvolutionsCard()
 
-        contentStack.addArrangedSubview(imageView)
+        contentStack.addArrangedSubview(imageContainerView)
         contentStack.addArrangedSubview(nameLabel)
         contentStack.addArrangedSubview(basicInfoCard)
         contentStack.addArrangedSubview(fieldsCard)
@@ -236,17 +268,62 @@ final class DigimonDetailViewController: UIViewController {
             priorEvolutionsStack.bottomAnchor.constraint(equalTo: priorEvolutionsCard.bottomAnchor, constant: -16)
         ])
     }
+    
+    @objc private func favoriteTapped() {
+        guard let id = currentDigimonId else { return }
+        
+        let isFavorite = FavoriteManager.shared.toggleFavorite(id: id, href: currentDigimonHref)
+        updateFavoriteButton(isFavorite: isFavorite, animated: true)
+    }
+    
+    private func updateFavoriteButton(isFavorite: Bool, animated: Bool = false) {
+        let imageName = isFavorite ? "heart.fill" : "heart"
+        let config = UIImage.SymbolConfiguration(pointSize: 20, weight: .medium)
+        let image = UIImage(systemName: imageName, withConfiguration: config)
+        
+        if animated {
+            UIView.transition(with: favoriteButton, duration: 0.2, options: .transitionCrossDissolve) {
+                self.favoriteButton.setImage(image, for: .normal)
+                self.favoriteButton.tintColor = isFavorite ? .systemRed : .systemGray
+            }
+            
+            UIView.animate(withDuration: 0.1, animations: {
+                self.favoriteButton.transform = CGAffineTransform(scaleX: 1.2, y: 1.2)
+            }) { _ in
+                UIView.animate(withDuration: 0.1) {
+                    self.favoriteButton.transform = .identity
+                }
+            }
+        } else {
+            favoriteButton.setImage(image, for: .normal)
+            favoriteButton.tintColor = isFavorite ? .systemRed : .systemGray
+        }
+    }
+    
+    private func observeFavoriteChanges() {
+        FavoriteManager.shared.favoritesDidChange
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                guard let self = self, let id = self.currentDigimonId else { return }
+                let isFavorite = FavoriteManager.shared.isFavorite(id: id)
+                self.updateFavoriteButton(isFavorite: isFavorite)
+            }
+            .store(in: &cancellables)
+    }
 
     private func updateUI(with detail: DigimonDetail) {
         title = "Digimon"
         nameLabel.text = detail.name
+        currentDigimonId = detail.id
 
         if let imageURL = detail.images?.first?.href {
             imageView.setImage(from: imageURL)
         }
+        
+        let isFavorite = FavoriteManager.shared.isFavorite(id: detail.id)
+        updateFavoriteButton(isFavorite: isFavorite)
 
         setupBasicInfo(detail)
-
         setupFieldsWithWrapping(detail.fields)
 
         if let description = detail.descriptions?.first(where: { $0.language.lowercased().contains("en") })?.description {
@@ -257,7 +334,6 @@ final class DigimonDetailViewController: UIViewController {
         }
 
         setupSkills(detail.skills)
-       
         setupPriorEvolutions(detail.priorEvolutions)
     }
     
