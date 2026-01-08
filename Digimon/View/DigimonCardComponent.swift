@@ -12,8 +12,8 @@ final class DigimonCardView: UIView {
     private let thumbnail = UIImageView()
     private let nameLabel = UILabel()
     private let metaLabel = UILabel()
-    private let fieldNameStack = UIStackView()
     private let fieldIconStack = UIStackView()
+    private let fieldLabel = UILabel()
     private var currentImageTask: URLSessionDataTask?
 
     override init(frame: CGRect) {
@@ -32,8 +32,13 @@ final class DigimonCardView: UIView {
         thumbnail.translatesAutoresizingMaskIntoConstraints = false
         nameLabel.translatesAutoresizingMaskIntoConstraints = false
         metaLabel.translatesAutoresizingMaskIntoConstraints = false
-        fieldNameStack.translatesAutoresizingMaskIntoConstraints = false
         fieldIconStack.translatesAutoresizingMaskIntoConstraints = false
+        
+        fieldLabel.translatesAutoresizingMaskIntoConstraints = false
+        fieldLabel.font = .systemFont(ofSize: 12)
+        fieldLabel.textColor = .secondaryLabel
+        fieldLabel.numberOfLines = 1
+        fieldLabel.lineBreakMode = .byTruncatingTail
 
         thumbnail.contentMode = .scaleAspectFill
         thumbnail.clipsToBounds = true
@@ -46,17 +51,13 @@ final class DigimonCardView: UIView {
         metaLabel.textColor = .secondaryLabel
         metaLabel.numberOfLines = 0
 
-        fieldNameStack.axis = .horizontal
-        fieldNameStack.spacing = 8
-        fieldNameStack.distribution = .fillProportionally
-
         fieldIconStack.axis = .horizontal
         fieldIconStack.spacing = 6
 
         addSubview(thumbnail)
         addSubview(nameLabel)
         addSubview(metaLabel)
-        addSubview(fieldNameStack)
+        addSubview(fieldLabel)
         addSubview(fieldIconStack)
 
         NSLayoutConstraint.activate([
@@ -73,11 +74,11 @@ final class DigimonCardView: UIView {
             metaLabel.leadingAnchor.constraint(equalTo: nameLabel.leadingAnchor),
             metaLabel.trailingAnchor.constraint(equalTo: nameLabel.trailingAnchor),
 
-            fieldNameStack.topAnchor.constraint(equalTo: metaLabel.bottomAnchor, constant: 8),
-            fieldNameStack.leadingAnchor.constraint(equalTo: nameLabel.leadingAnchor),
-            fieldNameStack.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -12),
+            fieldLabel.topAnchor.constraint(equalTo: metaLabel.bottomAnchor, constant: 8),
+            fieldLabel.leadingAnchor.constraint(equalTo: nameLabel.leadingAnchor),
+            fieldLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
 
-            fieldIconStack.topAnchor.constraint(equalTo: fieldNameStack.bottomAnchor, constant: 6),
+            fieldIconStack.topAnchor.constraint(equalTo: fieldLabel.bottomAnchor, constant: 6),
             fieldIconStack.leadingAnchor.constraint(equalTo: nameLabel.leadingAnchor),
             fieldIconStack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -12)
         ])
@@ -98,18 +99,16 @@ final class DigimonCardView: UIView {
             metaLabel.isHidden = true
         }
         
-        fieldNameStack.arrangedSubviews.forEach { $0.removeFromSuperview() }
         fieldIconStack.arrangedSubviews.forEach { $0.removeFromSuperview() }
         
         if !viewModel.fields.isEmpty {
+            let fieldNames = viewModel.fields.map { $0.name }
+            fieldLabel.text = fieldNames.joined(separator: " • ")
+            fieldLabel.isHidden = false
+
+            fieldIconStack.arrangedSubviews.forEach { $0.removeFromSuperview() }
+
             viewModel.fields.forEach { field in
-                let label = UILabel()
-                label.text = field.name
-                label.font = .systemFont(ofSize: 12)
-                label.textColor = .secondaryLabel
-                label.textColor = .secondaryLabel
-                fieldNameStack.addArrangedSubview(label)
-                
                 if let iconUrl = field.iconUrl {
                     let imageView = UIImageView()
                     imageView.setImage(from: iconUrl)
@@ -119,12 +118,13 @@ final class DigimonCardView: UIView {
                     fieldIconStack.addArrangedSubview(imageView)
                 }
             }
-            fieldNameStack.isHidden = false
+
             fieldIconStack.isHidden = false
         } else {
-            fieldNameStack.isHidden = true
+            fieldLabel.isHidden = true
             fieldIconStack.isHidden = true
         }
+
     }
 }
 
